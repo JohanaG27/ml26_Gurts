@@ -1,23 +1,13 @@
 import gymnasium as gym
 import numpy as np
-from ml26.example import fcn
-
-fcn(2, 3)
 
 
 class RandomAgent:
-    def __init__(self, env, alpha=0.1, gamma=0.9, epsilon=0.1):
+    def __init__(self, env, *args, **kwargs):
         self.env = env
         self.action_space = env.action_space
         self.observation_space = env.observation_space
         self.num_actions = env.action_space.n
-
-        # Tabla estados x acciones
-        self.Q = np.zeros((env.observation_space.n, env.action_space.n))
-        # Parameters
-        self.alpha = alpha  # Learning rate
-        self.gamma = gamma  # Discount factor
-        self.epsilon = epsilon  # Exploration rate
 
     def act(self, observation):
         return self.action_space.sample()
@@ -29,10 +19,16 @@ class RandomAgent:
 class QLearningAgent(RandomAgent):
     def __init__(self, env, alpha=0.1, gamma=0.9, epsilon=0.1):
         super().__init__(env, alpha, gamma, epsilon)
+        # Tabla estados x acciones
+        self.Q = np.zeros((env.observation_space.n, env.action_space.n))
+        # Parameters
+        self.alpha = alpha  # Learning rate
+        self.gamma = gamma  # Discount factor
+        self.epsilon = epsilon  # Exploration rate
 
     def act(self, observation):
         if np.random.random() < self.epsilon:
-            return env.action_space.sample()  # Exploration
+            return self.action_space.sample()  # Exploration
         else:
             return np.argmax(self.Q[observation])  # Exploitation
 
@@ -65,13 +61,13 @@ if __name__ == "__main__":
             next_obs, reward, done, _, _ = env.step(action)
             # update agent
             agent.step(obs, action, reward, next_obs)
-
-            if done:
-                break
             ep_return += reward
             obs = next_obs
             print(agent.Q)
             env.render()
+            if done:
+                break
+
         # TODO: Implementa algun código para reducir la exploración del agente conforme aprende
         # puedes decidir hacerlo por episodio, por paso del tiempo, retorno promedio, etc.
 
