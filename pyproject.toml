@@ -22,8 +22,7 @@ dependencies = [
     "ipympl",
     "notebook",
     "scipy",
-    "gymnasium>=0.26.3",
-    "gymnasium[classic_control]",
+    "gymnasium",
 ]
 
 [project.optional-dependencies]
