@@ -67,7 +67,7 @@ def train():
     cfg = {
         "training": {
             "learning_rate": 1e-4,
-            "n_epochs": 120,
+            "n_epochs": 150,
             "batch_size": 128,
         },
     }
@@ -115,11 +115,11 @@ def train():
         optimizer,
         mode="min",
         factor=0.5,
-        patience=5
+        patience=3
     )
 
     best_epoch_loss = np.inf
-    patience = 20
+    patience = 25
     min_delta = 0.001
     epochs_without_improvement = 0
 
