@@ -18,10 +18,15 @@ file_path = pathlib.Path(__file__).parent.absolute()
 
 def load_img(path):
     assert os.path.isfile(path), f"El archivo {path} no existe"
+
     img = cv2.imread(path)
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
     val_transforms, unnormalize = get_transforms("test", img_size=48)
-    tensor_img = val_transforms(img)
-    denormalized = unnormalize(tensor_img)
+
+    tensor_img = val_transforms(img_rgb)
+    denormalized = unnormalize(tensor_img.clone())
+
     return img, tensor_img, denormalized
 
 
@@ -44,12 +49,13 @@ def predict(img_title_paths):
         logits, proba = modelo.predict(transformed)
         pred = torch.argmax(proba, -1).item()
         pred_label = EMOTIONS_MAP[pred]
+        confidence = proba[0][pred].item()
 
         # Original / transformada
         h, w = original.shape[:2]
         resize_value = 300
         img = cv2.resize(original, (w * resize_value // h, resize_value))
-        img = add_img_text(img, f"Pred: {pred_label}")
+        img = add_img_text(img, f"Pred: {pred_label} ({confidence:.2f})")
 
         # Mostrar la imagen
         denormalized = to_numpy(denormalized)
@@ -57,6 +63,9 @@ def predict(img_title_paths):
         cv2.imshow("Predicción - original", img)
         cv2.imshow("Predicción - transformed", denormalized)
         cv2.waitKey(0)
+
+    cv2.destroyAllWindows()
+
 
 
 if __name__ == "__main__":
