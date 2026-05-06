@@ -69,6 +69,12 @@ def predict(img_title_paths):
 
 
 if __name__ == "__main__":
-    # Direcciones relativas a este archivo
-    img_paths = ["./test_imgs/happy.png"]
+    test_folder = file_path / "test_imgs"
+
+    img_paths = [
+        p.relative_to(file_path).as_posix()
+        for p in test_folder.iterdir()
+        if p.suffix.lower() in [".png", ".jpg", ".jpeg"]
+    ]
+
     predict(img_paths)
