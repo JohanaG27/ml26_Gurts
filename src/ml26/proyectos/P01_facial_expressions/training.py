@@ -74,7 +74,8 @@ def train():
     train_dataset, train_loader = get_loader(
         "train", batch_size=batch_size, shuffle=True
     )
-    val_dataset, val_loader = get_loader("val", batch_size=batch_size, shuffle=False)
+    val_dataset, val_loader = get_loader(
+        "val", batch_size=batch_size, shuffle=False)
     print(
         f"Cargando datasets --> entrenamiento: {len(train_dataset)}, validacion: {len(val_dataset)}"
     )
