@@ -17,8 +17,10 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 
 from ml26.proyectos.P02_customer_purchases.pipeline.io import (
     DATA_COLLECTED_AT,
@@ -51,11 +53,19 @@ def build_processor(
     savepath = Path(os.path.abspath(DATA_DIR)) / "preprocessor.pkl"
 
     if training:
-        text_transformers = [(col, CountVectorizer(), col) for col in count_features]
+        text_transformers = [(col, TfidfVectorizer(max_features=100), col) for col in count_features]
+        num_pipeline = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ])
+        cat_pipeline = Pipeline([
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("encoder", OneHotEncoder(handle_unknown="ignore")),
+        ])
         preprocessor = ColumnTransformer(
             transformers=[
-                ("num", StandardScaler(), numeric_features),
-                ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_features),
+                ("num", num_pipeline, numeric_features),
+                ("cat", cat_pipeline, categorical_features),
                 *text_transformers,
                 ("passthrough", "passthrough", passthrough_features),
             ],
@@ -78,7 +88,7 @@ def build_processor(
         )
     )
     bow_cols = []
-    for col in text_features:
+    for col in count_features:
         vocab = preprocessor.named_transformers_[col].get_feature_names_out()
         bow_cols.extend([f"{col}_bow_{t}" for t in vocab])
 
@@ -117,11 +127,64 @@ def preprocess(df: pd.DataFrame, training: bool = False) -> pd.DataFrame:
     # ── Features derivadas ─────────────────────────────────────────────────
     df["item_release_date"] = pd.to_datetime(df["item_release_date"], format="mixed")
 
+    # Limpieza de strings
+    df["customer_gender"] = (
+        df["customer_gender"]
+        .fillna("unknown")
+        .astype(str)
+        .str.lower()
+        .str.strip()
+    )
+
+    df["item_category"] = (
+        df["item_category"]
+        .fillna("unknown")
+        .astype(str)
+        .str.lower()
+        .str.strip()
+    )
+
+    df["item_title"] = (
+        df["item_title"]
+        .fillna("")
+        .astype(str)
+        .str.lower()
+        .str.strip()
+    )
+
     # item_days_since_release_cutoff: NO borrar — lo usa split_by_days en training.py
     # para separar train/val sin data leakage. Pasa sin escalar via passthrough.
     df["item_days_since_release_cutoff"] = (
         pd.to_datetime(DATA_COLLECTED_AT) - df["item_release_date"]
     ).dt.days
+
+    # Features del producto
+    df["item_days_since_release"] = df["item_days_since_release_cutoff"]
+    df["item_release_dayofweek"] = df["item_release_date"].dt.dayofweek
+    df["item_release_month"] = df["item_release_date"].dt.month
+
+    # Match con categorías favoritas del cliente
+    for i in range(1, 4):
+        col = f"customer_top_{i}_cat"
+        if col in df.columns:
+            df[f"customer_top_{i}_match"] = (
+                df[col].astype(str).str.lower().str.strip() == df["item_category"]
+            ).astype(int)
+        else:
+            df[f"customer_top_{i}_match"] = 0
+
+    # Frecuencia del cliente en la categoría del producto
+    df["customer_category_frequency"] = df.apply(
+        lambda row: row.get(f"freq_cat_{row['item_category']}", 0),
+        axis=1,
+    )
+
+    # Precio vs historial del cliente
+    df["price_ratio_vs_customer_avg"] = df["item_price"] / (df["rfm_monetary"] + 1e-6)
+    df["price_diff_vs_customer_avg"] = df["item_price"] - df["rfm_monetary"]
+
+    # Si la categoría ya aparece en el historial del cliente
+    df["is_favorite_category"] = (df["customer_category_frequency"] > 0).astype(int)
 
     # ── TODO: crea aquí tus features derivadas ─────────────────────────────
     # Ejemplos:
@@ -146,19 +209,40 @@ def preprocess(df: pd.DataFrame, training: bool = False) -> pd.DataFrame:
     # ── Definicion de grupos de features ───────────────────────────────────
     # Agrega aquí las columnas que quieras escalar con StandardScaler
     numeric_features = [
-        "customer_age_years",  # ejemplo: edad del cliente
-        # "customer_tenure_months",
-        # "item_days_since_release",
+        "customer_age",
+        "customer_tenure_days",
+        "rfm_frequency",
+        "rfm_recency",
+        "rfm_monetary",
+        "rfm_max_spend",
+        "rfm_unique_cats",
+        "rfm_avg_views",
+        "rfm_rated_ratio",
+        "item_price",
+        "item_days_since_release",
+        "item_release_dayofweek",
+        "item_release_month",
+        "customer_category_frequency",
+        "price_ratio_vs_customer_avg",
+        "price_diff_vs_customer_avg",
+        "is_favorite_category",
+        "customer_top_1_match",
+        "customer_top_2_match",
+        "customer_top_3_match",
+        "img_mean_r",
+        "img_mean_g",
+        "img_mean_b",
     ]
 
     # Agrega aquí columnas categóricas para OneHotEncoder
     categorical_features = [
-        # "customer_prefered_device",
+        "customer_gender",
+        "item_category",
+        "rfm_device_mode",
     ]
-
     # Agrega aquí columnas para CountVectorizer
     count_features = [
-        # "item_title",
+        "item_title",
     ]
 
     # Columnas que pasan sin transformar — item_days_since_release_cutoff es

@@ -34,26 +34,132 @@ def extract_customer_features(train_df: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame con una fila por customer_id.
     """
     df = train_df.copy()
-    df["item_release_date"] = pd.to_datetime(df["item_release_date"])
-    df["purchase_timestamp"] = pd.to_datetime(df["purchase_timestamp"])
-    df["customer_date_of_birth"] = pd.to_datetime(df["customer_date_of_birth"])
-    df["customer_signup_date"] = pd.to_datetime(df["customer_signup_date"])
+
+    date_cols = [
+        "item_release_date",
+        "purchase_timestamp",
+        "customer_date_of_birth",
+        "customer_signup_date",
+    ]
+
+    for col in date_cols:
+        if col in df.columns:
+            df[col] = pd.to_datetime(
+                df[col],
+                dayfirst=True,
+                errors="coerce",
+            )
+
+    #Limpieza
+    df["customer_gender"] = (
+        df["customer_gender"]
+        .fillna("unknown")
+        .astype(str)
+        .str.lower()
+        .str.strip()
+    )
+
+    df["purchase_device"] = (
+        df["purchase_device"]
+        .fillna("unknown")
+        .astype(str)
+        .str.lower()
+        .str.strip()
+    )
+
+    df["item_category"] = (
+        df["item_category"]
+        .fillna("unknown")
+        .astype(str)
+        .str.lower()
+        .str.strip()
+    )
 
     group = df.groupby("customer_id")
 
     today_ts = pd.to_datetime(DATA_COLLECTED_AT)
 
-    # ── Ejemplo: edad del cliente en años ──────────────────────────────────
-    customer_age_years = (
+    # ── Ejemplo: edad del cliente en dias ──────────────────────────────────
+    customer_age = (
         today_ts - group["customer_date_of_birth"].first()
     ).dt.days // 365
 
-    # ── Ejemplo: antigüedad en la plataforma en meses ──────────────────────
-    customer_tenure_months = (
+    # ── Ejemplo: antigüedad en la plataforma en dias ──────────────────────
+    customer_tenure_days = (
         today_ts - group["customer_signup_date"].first()
-    ).dt.days // 30
+    ).dt.days
 
     # ── TODO: agrega aquí tus propias features ─────────────────────────────
+
+    # Frecuencia total de compras
+    rfm_frequency = group.size()
+
+    # Recencia: días desde última compra
+    rfm_recency = (
+        today_ts - group["purchase_timestamp"].max()
+    ).dt.days
+
+    # Monetary: gasto promedio
+    rfm_monetary = group["item_price"].mean()
+
+    # Máximo gasto histórico
+    rfm_max_spend = group["item_price"].max()
+
+    # Cantidad de categorías distintas
+    rfm_unique_cats = group["item_category"].nunique()
+
+    # Promedio de vistas antes de comprar
+    rfm_avg_views = group["customer_item_views"].mean()
+
+    # Ratio de compras calificadas
+    rfm_rated_ratio = group["purchase_item_rating"].apply(
+        lambda x: x.notna().mean()
+    )
+
+    #device mode
+    rfm_device_mode = group["purchase_device"].agg(
+        lambda x: x.mode().iloc[0] if not x.mode().empty else "unknown"
+    )
+
+    #categorias favoritas top3
+
+    top_categories = (
+        df.groupby(["customer_id", "item_category"])
+        .size()
+        .reset_index(name="count")
+    )
+
+    top_categories = top_categories.sort_values(
+        ["customer_id", "count"],
+        ascending=[True, False]
+    )
+
+    top_3 = top_categories.groupby("customer_id").head(3).copy()
+
+    top_3["rank"] = top_3.groupby("customer_id").cumcount() + 1
+
+    top_pivot = top_3.pivot(
+        index="customer_id",
+        columns="rank",
+        values="item_category"
+    )
+
+    top_pivot.columns = [
+        f"customer_top_{c}_cat"
+        for c in top_pivot.columns
+    ]
+
+    #frec por categoria
+
+    category_freq = pd.crosstab(
+        df["customer_id"],
+        df["item_category"]
+    )
+
+    category_freq.columns = [
+        f"freq_cat_{c}"
+        for c in category_freq.columns
+    ]
 
     # ── Construir DataFrame final ───────────────────────────────────────────
 
@@ -61,13 +167,46 @@ def extract_customer_features(train_df: pd.DataFrame) -> pd.DataFrame:
     customer_feat = pd.concat(
         {
             "customer_id": group["customer_id"].first(),
-            "customer_age_years": customer_age_years,
-            "customer_tenure_months": customer_tenure_months,
-            # Agrega aquí las features que calculaste arriba, por ejemplo:
-            # "customer_avg_price": customer_avg_price,
+            "customer_gender": group["customer_gender"].first(),
+
+            "customer_age": customer_age,
+            "customer_tenure_days": customer_tenure_days,
+
+            "rfm_frequency": rfm_frequency,
+            "rfm_recency": rfm_recency,
+            "rfm_monetary": rfm_monetary,
+            "rfm_max_spend": rfm_max_spend,
+            "rfm_unique_cats": rfm_unique_cats,
+            "rfm_avg_views": rfm_avg_views,
+            "rfm_rated_ratio": rfm_rated_ratio,
+
+            "rfm_device_mode": rfm_device_mode,
         },
         axis=1,
     ).reset_index(drop=True)
+
+    #une top categorias y categorias_freq
+    customer_feat = customer_feat.merge(
+        top_pivot.reset_index(),
+        on="customer_id",
+        how="left"
+    )
+
+    customer_feat = customer_feat.merge(
+        category_freq.reset_index(),
+        on="customer_id",
+        how="left"
+    )
+
+    #rellenar nulos
+    customer_feat = customer_feat.fillna({
+        "customer_top_1_cat": "unknown",
+        "customer_top_2_cat": "unknown",
+        "customer_top_3_cat": "unknown",
+    })
+
+    freq_cols = [c for c in customer_feat.columns if c.startswith("freq_cat_")]
+    customer_feat[freq_cols] = customer_feat[freq_cols].fillna(0)
 
     # Persistir — read_test_data() carga este archivo en lugar de recomputar
     save_path = os.path.abspath(os.path.join(DATA_DIR, "customer_features.csv"))

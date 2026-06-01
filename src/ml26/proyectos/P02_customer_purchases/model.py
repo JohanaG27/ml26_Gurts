@@ -42,18 +42,48 @@ class PurchaseModel:
         )
 
     def get_classifier(self, name: str, **args):
-        # Return the sklearn class instance for the classifier to use
         name = name.lower()
-        pass
+
+        if name in ["logistic", "logisticregression", "logistic regression"]:
+            return LogisticRegression(
+                solver=self.solver,
+                max_iter=self.max_iter,
+                class_weight="balanced",
+                random_state=42,
+            )
+
+        if name in ["rf", "randomforest", "random forest"]:
+            return RandomForestClassifier(
+                n_estimators=200,
+                max_depth=None,
+                class_weight="balanced",
+                random_state=42,
+                n_jobs=-1,
+            )
+
+        if name in ["xgb", "xgboost"]:
+            return xgb.XGBClassifier(
+                n_estimators=300,
+                learning_rate=0.05,
+                max_depth=5,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                eval_metric="logloss",
+                random_state=42,
+            )
+
+        raise ValueError(f"Modelo no soportado: {name}")
+
 
     def fit(self, X, y):
-        pass
+        self.model.fit(X, y)
+        return self
 
     def predict(self, X):
-        pass
+        return self.model.predict(X)
 
     def predict_proba(self, X):
-        pass
+        return self.model.predict_proba(X)
 
     def get_config(self):
         return {

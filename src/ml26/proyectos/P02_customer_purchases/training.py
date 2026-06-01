@@ -1,5 +1,12 @@
 import json
-from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.metrics import (
+    classification_report,
+    roc_auc_score,
+    average_precision_score,
+    f1_score,
+    precision_score,
+    recall_score,
+)
 # Custom
 from ml26.proyectos.P02_customer_purchases.model import (
     PurchaseModel,
@@ -83,21 +90,42 @@ def run_training(X, y, classifier: str):
     y_pred = model.predict(X_val)
     y_proba = model.predict_proba(X_val)[:, 1]
 
+    #guardar metricas asi fresh
     auc = roc_auc_score(y_val, y_proba)
+    avg_precision = average_precision_score(y_val, y_proba)
+    f1 = f1_score(y_val, y_pred)
+    precision = precision_score(y_val, y_pred)
+    recall = recall_score(y_val, y_pred)
+
     report = classification_report(y_val, y_pred, output_dict=True)
 
+    metrics = {
+        "auc_roc": auc,
+        "average_precision": avg_precision,
+        "f1": f1,
+        "precision": precision,
+        "recall": recall,
+        "classification_report": report,
+        "model_config": model.get_config(),
+    }
+
+    #tags de validacion mas claros
     logger.info(f"Validation AUC-ROC: {auc:.4f}")
-    logger.info(f"Validation metrics: {report}")
+    logger.info(f"Validation Average Precision: {avg_precision:.4f}")
+    logger.info(f"Validation F1: {f1:.4f}")
+    logger.info(f"Validation Precision: {precision:.4f}")
+    logger.info(f"Validation Recall: {recall:.4f}")
+    logger.info(f"Validation classification report: {report}")
 
     # Guardar modelo y reporte
     logger.info("Saving model...")
     model.save()
     logger.info(f"Model saved to {model.run_dir}")
 
-    report_path = model.run_dir / "classification_report.json"
+    report_path = model.run_dir / "metrics.json"
     with open(report_path, "w") as f:
-        json.dump(report, f, indent=2)
-    logger.info(f"Report saved to {report_path}")
+        json.dump(metrics, f, indent=2)
+    logger.info(f"Metrics saved to {report_path}")
 
     return model, model.run_dir
 

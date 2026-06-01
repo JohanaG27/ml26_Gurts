@@ -41,6 +41,7 @@ def run_inference(model_path: str, X, ids=None):
     logger.info("Generating predictions...")
     # Realizar la inferencia
     #cambios porque segun lo que vi kaggle quiere prob en pred no 0/1
+
     probs = model.predict_proba(X)[:, 1]
 
     results = pd.DataFrame(
@@ -51,10 +52,6 @@ def run_inference(model_path: str, X, ids=None):
     )
 
     logger.info(f"Generated predictions: {results.shape}")
-
-    results = pd.DataFrame(
-        {"ID": ids if ids is not None else X.index, "pred": preds, "proba": probs}
-    )
     return results
 
 
@@ -85,7 +82,7 @@ if __name__ == "__main__":
     main_logger.info(f"Loaded test data: X={X.shape}")
     main_logger.info(f"Loaded test IDs: {len(test_ids)}")
 
-    model_folder = ""
+    model_folder = "logistic_lbfgs_1000_20260601_062108"
     model_name = "model.pkl"
     results = run_inference(model_folder, X, ids=test_ids)
     # Guardar predicciones del modelo

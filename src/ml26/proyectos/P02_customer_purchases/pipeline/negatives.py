@@ -82,7 +82,7 @@ def gen_random_negatives(df: pd.DataFrame, n_per_positive: int = 1) -> pd.DataFr
     return pd.DataFrame(rows)
 
 
-def gen_uniform_random(df: pd.DataFrame, n_per_positive: int = 1) -> pd.DataFrame:
+def gen_uniform_random(df: pd.DataFrame, n_per_positive: int = 3) -> pd.DataFrame:
     """Genera negativos de forma global, proporcional a la actividad del cliente.
 
     A diferencia de gen_random_negatives —que da exactamente n negativos por
