@@ -75,8 +75,17 @@ class PurchaseModel:
         raise ValueError(f"Modelo no soportado: {name}")
 
 
-    def fit(self, X, y):
-        self.model.fit(X, y)
+    def fit(self, X, y, eval_set=None):
+        if self.model_type.lower() in ["xgb", "xgboost"] and eval_set is not None:
+            self.model.fit(
+                X,
+                y,
+                classifier__eval_set=eval_set,
+                classifier__verbose=False,
+            )
+        else:
+            self.model.fit(X, y)
+
         return self
 
     def predict(self, X):
