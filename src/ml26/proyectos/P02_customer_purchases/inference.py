@@ -82,7 +82,7 @@ if __name__ == "__main__":
     main_logger.info(f"Loaded test data: X={X.shape}")
     main_logger.info(f"Loaded test IDs: {len(test_ids)}")
 
-    model_folder = "logistic_lbfgs_1000_20260601_062108"
+    model_folder = "rf_lbfgs_1000_20260601_062108"
     model_name = "model.pkl"
     results = run_inference(model_folder, X, ids=test_ids)
     # Guardar predicciones del modelo
