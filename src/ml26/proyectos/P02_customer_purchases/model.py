@@ -8,6 +8,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 import xgboost as xgb
+from xgboost.callback import EarlyStopping
 from imblearn.over_sampling import SMOTE
 
 CURRENT_FILE = Path(__file__).resolve()
@@ -76,8 +77,15 @@ class PurchaseModel:
                 colsample_bytree=0.8,
                 reg_alpha=0.1,
                 reg_lambda=2.0,
-                eval_metric="logloss",
+                eval_metric="aucpr",
                 random_state=42,
+                callbacks=[
+                    EarlyStopping(
+                        rounds=30,
+                        save_best=True,
+                        maximize=True,
+                    )
+                ]
             )
 
         raise ValueError(f"Modelo no soportado: {name}")

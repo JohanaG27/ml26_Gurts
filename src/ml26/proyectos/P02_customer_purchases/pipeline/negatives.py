@@ -153,6 +153,45 @@ def gen_popularity_weighted(df: pd.DataFrame, n_per_positive: int = 1) -> pd.Dat
     return pd.DataFrame(rows)
 
 
+def gen_mixed_negatives(
+    df: pd.DataFrame,
+    n_per_positive: int = 3,
+    popularity_ratio: float = 0.90,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """
+    Genera negativos mezclando dos estrategias:
+    - 10% gen_uniform_random: negativos variados y proporcionales a la actividad del cliente.
+    - 90% gen_popularity_weighted: negativos más difíciles usando ítems populares.
+
+    Esto busca que el modelo no aprenda solo negativos demasiado fáciles.
+    """
+    total_target = len(df) * n_per_positive
+
+    # Generamos más de lo necesario para tener margen después de quitar duplicados.
+    uniform_neg = gen_uniform_random(df, n_per_positive=n_per_positive)
+    popularity_neg = gen_popularity_weighted(df, n_per_positive=n_per_positive)
+
+    n_popularity = int(total_target * popularity_ratio)
+    n_uniform = total_target - n_popularity
+
+    if len(uniform_neg) > n_uniform:
+        uniform_neg = uniform_neg.sample(n=n_uniform, random_state=random_state)
+
+    if len(popularity_neg) > n_popularity:
+        popularity_neg = popularity_neg.sample(n=n_popularity, random_state=random_state)
+
+    mixed = pd.concat([uniform_neg, popularity_neg], ignore_index=True)
+
+    # Evita repetir el mismo par cliente-producto.
+    mixed = mixed.drop_duplicates(subset=["customer_id", "item_id"])
+
+    # Si después de quitar duplicados todavía sobran, recorta al objetivo.
+    if len(mixed) > total_target:
+        mixed = mixed.sample(n=total_target, random_state=random_state)
+
+    return mixed.reset_index(drop=True)
+
 def gen_smart_negatives(df: pd.DataFrame, n_per_positive: int = 1) -> pd.DataFrame:
     """Placeholder para tu propia estrategia de negativos.
 

@@ -23,7 +23,7 @@ from ml26.proyectos.P02_customer_purchases.pipeline.io import (
 )
 from ml26.proyectos.P02_customer_purchases.pipeline.negatives import (
     gen_final_dataset,
-    gen_uniform_random,
+    gen_mixed_negatives,
 )
 from ml26.proyectos.P02_customer_purchases.pipeline.preprocessing import (
     preprocess,
@@ -132,13 +132,13 @@ def read_train_data(cutoff_days: int = 60):
     )
 
     # 3. Negativos de entrenamiento: solo usan historial viejo.
-    train_negatives = gen_uniform_random(train_old_pos, n_per_positive=3)
+    train_negatives = gen_mixed_negatives(train_old_pos, n_per_positive=3)
     train_old = gen_final_dataset(train_old_pos, train_negatives)
 
     # 4. Negativos de validación: solo usan bloque reciente.
     # Esto mantiene una evaluación artificial, pero sin usar compras futuras
     # para decidir qué pares no deben ser negativos en train.
-    val_negatives = gen_uniform_random(val_recent_pos, n_per_positive=3)
+    val_negatives = gen_mixed_negatives(val_recent_pos, n_per_positive=3)
     val_recent = gen_final_dataset(val_recent_pos, val_negatives)
 
     # 5. Customer features SOLO con compras reales del train viejo.
