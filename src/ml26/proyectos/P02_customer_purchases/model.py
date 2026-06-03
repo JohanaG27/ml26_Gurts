@@ -47,15 +47,20 @@ class PurchaseModel:
         if name in ["logistic", "logisticregression", "logistic regression"]:
             return LogisticRegression(
                 solver=self.solver,
-                max_iter=self.max_iter,
+                max_iter=2000,
+                C=0.5,
                 class_weight="balanced",
                 random_state=42,
             )
 
+
         if name in ["rf", "randomforest", "random forest"]:
             return RandomForestClassifier(
                 n_estimators=200,
-                max_depth=None,
+                max_depth=12,
+                min_samples_split=10,
+                min_samples_leaf=5,
+                max_features="sqrt",
                 class_weight="balanced",
                 random_state=42,
                 n_jobs=-1,
@@ -63,11 +68,14 @@ class PurchaseModel:
 
         if name in ["xgb", "xgboost"]:
             return xgb.XGBClassifier(
-                n_estimators=300,
-                learning_rate=0.05,
-                max_depth=5,
+                n_estimators=400,
+                learning_rate=0.03,
+                max_depth=4,
+                min_child_weight=5,
                 subsample=0.8,
                 colsample_bytree=0.8,
+                reg_alpha=0.1,
+                reg_lambda=2.0,
                 eval_metric="logloss",
                 random_state=42,
             )

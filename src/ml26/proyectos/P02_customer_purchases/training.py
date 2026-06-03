@@ -19,40 +19,7 @@ from ml26.proyectos.P02_customer_purchases.pipeline import (
 )
 
 
-def split_by_days(X, y, cutoff_days=60):
-    """
-    Separa train y validación usando item_days_since_release_cutoff.
-
-    Las filas con ítems lanzados hace <= cutoff_days van a validación;
-    el resto va a entrenamiento. Esto imita la distribución cold-start
-    del test (ítems nuevos) mejor que un split aleatorio.
-
-    Parameters
-    ----------
-    X            : pd.DataFrame con columna item_days_since_release_cutoff.
-    y            : pd.Series de etiquetas alineada con X.
-    cutoff_days  : ítems lanzados hace <= este número de días van a val.
-
-    Returns
-    -------
-    X_train, X_val, y_train, y_val
-    """
-    if "item_days_since_release_cutoff" not in X.columns:
-        raise ValueError("X must contain an 'item_days_since_release_cutoff' column")
-
-    X = X.copy()
-
-    # Split into train/val usando el valor crudo (no escalado)
-    val_mask = X["item_days_since_release_cutoff"] <= cutoff_days
-    X = X.drop(columns=["item_days_since_release_cutoff"])
-    X_val, y_val = X[val_mask], y[val_mask]
-    X_train, y_train = X[~val_mask], y[~val_mask]
-
-    # Shuffle training set
-    train_idx = X_train.sample(frac=1, random_state=42).index
-    X_train, y_train = X_train.loc[train_idx], y_train.loc[train_idx]
-
-    return X_train, X_val, y_train, y_val
+#split by days ya no esta aqui, se hace en orchestration para evitar que validation reciba historial futuro del cliente.
 
 
 def evaluate_model(model, X, y):
@@ -71,7 +38,7 @@ def evaluate_model(model, X, y):
     }
 
 
-def run_training(X, y, classifier: str):
+def run_training(X_train, X_val, y_train, y_val, classifier: str):
     # El modelo genera self.name y self.run_dir al inicializarse
     model = PurchaseModel(classifier=classifier)
 
@@ -79,14 +46,6 @@ def run_training(X, y, classifier: str):
     logger = setup_logger(model.name, log_dir=model.run_dir)
     logger.info(f"Run: {model.name}")
     logger.info(f"Model parameters: {model.get_config()}")
-
-    #Logs nuevos tuneados
-    logger.info(f"Full dataset shape: X={X.shape}, y={y.shape}")
-    logger.info(f"Full dataset positives: {y.sum()} | negatives: {(y == 0).sum()}")
-
-    # Separar en entrenamiento y validacion
-    X_train, X_val, y_train, y_val = split_by_days(X, y, cutoff_days=60)
-    logger.info(f"Split dataset: {len(X_train)} train / {len(X_val)} val")
 
     #Logs nuevos tuneados 2
     logger.info(f"Train shape: {X_train.shape}")
@@ -166,14 +125,18 @@ def run_training(X, y, classifier: str):
 
 
 if __name__ == "__main__":
-    X, y = read_train_data()
-
     main_logger = setup_logger("training_main")
     main_logger.info("Training script started")
-    main_logger.info(f"Loaded training data: X={X.shape}, y={y.shape}")
+
+    X_train, X_val, y_train, y_val = read_train_data(cutoff_days=60)
+
+    main_logger.info(
+        f"Loaded leakage-safe temporal split: "
+        f"X_train={X_train.shape}, X_val={X_val.shape}"
+    )
 
     models = ["logistic", "rf", "xgb"]
     for model in models:
-        run_training(X, y, model)
-    
+        run_training(X_train, X_val, y_train, y_val, model)
+
     main_logger.info("Training script finished")

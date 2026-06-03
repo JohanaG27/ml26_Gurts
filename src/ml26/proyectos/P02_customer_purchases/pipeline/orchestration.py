@@ -17,6 +17,7 @@ from ml26.proyectos.P02_customer_purchases.pipeline.features.image import (
     extract_image_features,
 )
 from ml26.proyectos.P02_customer_purchases.pipeline.io import (
+    DATA_COLLECTED_AT,
     df_to_numeric,
     read_csv,
 )
@@ -50,52 +51,108 @@ def _add_customer_features(
         df, customer_feat[["customer_id"] + agg_cols], on="customer_id", how="left"
     )
 
-
-def read_train_data():
-    """Carga y preprocesa los datos de entrenamiento.
-
-    Flujo:
-      1. Carga el CSV de compras (solo positivos).
-      2. Calcula y persiste features por cliente.
-      3. Genera ejemplos negativos.
-      4. Combina positivos y negativos (gen_final_dataset).
-      5. Agrega features de cliente al dataset combinado.
-      6. Extrae y agrega features de imagen por ítem.  [opcional]
-      7. Aplica preprocess (ajusta y guarda el preprocessor).
-
-    Returns
-    -------
-    X : pd.DataFrame -- features de entrenamiento.
-    y : pd.Series   -- etiquetas (0 / 1).
+def _split_raw_by_days(df: pd.DataFrame, cutoff_days: int = 60):
     """
-    # 1. Carga el CSV de compras (solo positivos).
+    Split temporal antes de calcular customer_features y antes de preprocess.
+    Esto evita que validation reciba historial futuro del cliente.
+    """
+    data = df.copy()
+
+    data["item_release_date"] = pd.to_datetime(
+        data["item_release_date"],
+        format="mixed",
+        dayfirst=True,
+        errors="coerce",
+    )
+
+    cutoff_ts = pd.to_datetime(DATA_COLLECTED_AT)
+    days_since_release = (cutoff_ts - data["item_release_date"]).dt.days
+
+    val_mask = days_since_release <= cutoff_days
+
+    train_old = data.loc[~val_mask].copy()
+    val_recent = data.loc[val_mask].copy()
+
+    train_old = train_old.sample(frac=1, random_state=42).reset_index(drop=True)
+    val_recent = val_recent.reset_index(drop=True)
+
+    return train_old, val_recent
+
+
+def _preprocess_labeled(df: pd.DataFrame, training: bool):
+    """
+    Agrega imagen, aplica preprocess y separa X/y.
+    """
+    data = _add_image_features(df)
+
+    processed = preprocess(data, training=training)
+    processed = df_to_numeric(processed)
+
+    processed = pd.concat(
+        [processed, data["label"].reset_index(drop=True)],
+        axis=1,
+    )
+
+    y = processed["label"]
+
+    X = processed.drop(
+        columns=[
+            "label",
+            "customer_id",
+            "item_id",
+            "item_days_since_release_cutoff",
+        ],
+        errors="ignore",
+    )
+
+    return X, y
+
+
+def read_train_data(cutoff_days: int = 60):
+    """
+    Carga y preprocesa los datos de entrenamiento evitando data leakage temporal.
+
+    Flujo leakage-safe:
+      1. Cargar train_df con compras positivas.
+      2. Separar primero positivos viejos y positivos recientes.
+      3. Generar negativos de train usando SOLO positivos viejos.
+      4. Generar negativos de validation usando SOLO positivos recientes.
+      5. Combinar positivos + negativos por bloque.
+      6. Calcular customer_features SOLO con positivos viejos.
+      7. Aplicar mismas customer_features a train y validation.
+      8. Ajustar preprocessor solo con train y transformar validation.
+    """
+    # 1. Carga el CSV de compras positivas.
     train_df = read_csv("customer_purchases_train")
 
-    # 2. Calcula y persiste features por cliente.
-    customer_feat = extract_customer_features(train_df)
+    # 2. Split temporal ANTES de generar negativos.
+    train_old_pos, val_recent_pos = _split_raw_by_days(
+        train_df,
+        cutoff_days=cutoff_days,
+    )
 
-    # 3. Genera ejemplos negativos.
-    # Revisa el código de negatives.py para seleccionar tu estrategia
-    negatives = gen_uniform_random(train_df, n_per_positive=3)
+    # 3. Negativos de entrenamiento: solo usan historial viejo.
+    train_negatives = gen_uniform_random(train_old_pos, n_per_positive=3)
+    train_old = gen_final_dataset(train_old_pos, train_negatives)
 
-    # 4. Combina positivos y negativos (gen_final_dataset).
-    full_df = gen_final_dataset(train_df, negatives)
+    # 4. Negativos de validación: solo usan bloque reciente.
+    # Esto mantiene una evaluación artificial, pero sin usar compras futuras
+    # para decidir qué pares no deben ser negativos en train.
+    val_negatives = gen_uniform_random(val_recent_pos, n_per_positive=3)
+    val_recent = gen_final_dataset(val_recent_pos, val_negatives)
 
-    # 5. Agrega features de cliente al dataset combinado.
-    full_df = _add_customer_features(full_df, customer_feat)
+    # 5. Customer features SOLO con compras reales del train viejo.
+    customer_feat = extract_customer_features(train_old_pos)
 
-    # 6. Extrae y agrega features de imagen por ítem.
-    full_df = _add_image_features(full_df)
+    # 6. Aplicar mismas customer_features a train y validation.
+    train_old = _add_customer_features(train_old, customer_feat)
+    val_recent = _add_customer_features(val_recent, customer_feat)
 
-    # 7. Aplica preprocess (ajusta y guarda el preprocessor).
-    processed = preprocess(full_df, training=True)
-    processed = df_to_numeric(processed)
-    processed = pd.concat([processed, full_df["label"].reset_index(drop=True)], axis=1)
+    # 7. Preprocess: fit solo con train, transform con validation.
+    X_train, y_train = _preprocess_labeled(train_old, training=True)
+    X_val, y_val = _preprocess_labeled(val_recent, training=False)
 
-    # Regresar conjunto separando atributos de etiqueta para entrenar
-    y = processed["label"]
-    X = processed.drop(columns=["label", "customer_id", "item_id"], errors="ignore")
-    return X, y
+    return X_train, X_val, y_train, y_val
 
 
 def read_test_data():
