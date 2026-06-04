@@ -82,7 +82,7 @@ if __name__ == "__main__":
     main_logger.info(f"Loaded test data: X={X.shape}")
     main_logger.info(f"Loaded test IDs: {len(test_ids)}")
 
-    model_folder = "logistic_10_2_earlystopping" # Cambia esto por el modelo que quieran usar para la inferencia final. Asegúrense de que exista en trained_models y tenga un model.pkl adentro.
+    model_folder = "logistic_11_earlystopping" # Cambia esto por el modelo que quieran usar para la inferencia final. Asegúrense de que exista en trained_models y tenga un model.pkl adentro.
     model_name = "model.pkl"
     results = run_inference(model_folder, X, ids=test_ids)
     # Guardar predicciones del modelo
